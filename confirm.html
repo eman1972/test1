@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+  <base target="_top">
+  <!-- カメラ読み取り用ライブラリ -->
+  <script src="https://unpkg.com/html5-qrcode"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      padding: 15px;
+      background-color: #f4f4f9;
+      margin: 0;
+    }
+    h1 { font-size: 48px; color: #333; margin-bottom: 10px; }
+    #reader {
+      font-size: 48px;
+      width: 100%;
+      max-width: 480px;
+      margin: 0 auto;
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+      overflow: hidden;
+    }
+    #result {
+      font-size: 32px;
+      margin-top: 20px;
+      padding: 15px;
+      border-radius: 8px;
+      min-height: 70px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    .status-title {
+      font-size: 1.2em;
+      font-weight: bold;
+      margin-bottom: 5px;
+    }
+    .status-time {
+      font-size: 0.95em;
+      opacity: 0.85;
+    }
+    .default { background-color: #e9ecef; color: #495057; }
+    .success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+    .warning { background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
+    .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+  </style>
+</head>
+<body>
+
+  <h1>福井県小学校家庭科研究大会<br>坂井大会<br>受付システム</h1>
+
+  <button onclick="startCamera()" style="font-size:20px; padding:12px 24px; margin:10px;">
+  カメラを開始
+</button>
+
+  <div id="reader"></div>
+  
+  <div id="result" class="default">
+    <div class="status-title">QRコードをカメラにかざしてください</div>
+    <div class="status-time" id="result-time"></div>
+  </div>
+
+  <script>
+    let isProcessing = false;
+
+    function onScanSuccess(decodedText) {
+      if (isProcessing) return; // 連続読み込み防止
+      isProcessing = true;
+
+      const resultDiv = document.getElementById('result');
+      const timeDiv = document.getElementById('result-time');
+      
+      resultDiv.className = 'default';
+      resultDiv.querySelector('.status-title').innerText = "照合中 (ID: " + decodedText + ")...";
+      timeDiv.innerText = "";
+
+// GASのWebアプリへ受付IDを送信
+const gasUrl = "https://script.google.com/macros/s/AKfycbwN0eqxM_wwgI0OjvDOSRaYQRqlX_Uccw1ZODyy7xJPdvgICwc_F52TmXbofZYBDdiomg/exec";
+
+fetch(gasUrl + "?id=" + encodeURIComponent(decodedText))
+  .then(response => response.json())
+  .then(response => {
+
+    if (response.success) {
+      if (response.message.includes("重複")) {
+        resultDiv.className = 'warning';
+        resultDiv.querySelector('.status-title').innerText =
+          "【重複】 " + response.name + " 様";
+        timeDiv.innerText =
+          "受付日時: " + response.time + " (受付済み)";
+      } else {
+        resultDiv.className = 'success';
+        resultDiv.querySelector('.status-title').innerText =
+          "【完了】 " + response.name + " 様";
+        timeDiv.innerText =
+          "受付日時: " + response.time;
+      }
+    } else {
+      resultDiv.className = 'error';
+      resultDiv.querySelector('.status-title').innerText =
+        "【エラー】 " + response.message;
+      timeDiv.innerText = "";
+    }
+
+    setTimeout(() => {
+      isProcessing = false;
+      resultDiv.className = 'default';
+      resultDiv.querySelector('.status-title').innerText =
+        "次のQRコードをカメラにかざしてください";
+      timeDiv.innerText = "";
+    }, 3000);
+  })
+  .catch(err => {
+    resultDiv.className = 'error';
+    resultDiv.querySelector('.status-title').innerText =
+      "通信エラーが発生しました";
+    timeDiv.innerText = err;
+
+    setTimeout(() => {
+      isProcessing = false;
+    }, 3000);
+  });
+
+    }
+
+    // QRコード読み取りオブジェクト
+const html5QrCode = new Html5Qrcode("reader");
+
+// ボタンを押したときにカメラを起動
+async function startCamera() {
+  try {
+    await html5QrCode.start(
+      { facingMode: "environment" }, // 背面カメラ
+      {
+        fps: 10,
+        qrbox: { width: 220, height: 220 }
+      },
+      onScanSuccess
+    );
+  } catch (err) {
+    document.getElementById("result").querySelector(".status-title").innerText =
+      "カメラを起動できません";
+    document.getElementById("result-time").innerText = err;
+  }
+}
+  </script>
+</body>
+</html>
+
